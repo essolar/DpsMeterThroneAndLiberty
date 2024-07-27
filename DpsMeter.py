@@ -136,4 +136,4 @@ reset_button = tk.Button(root, text="Reset", command=reset_counters)
 reset_button.pack()
 
 ### run the application
-root.mainloop
+root.mainloop()
