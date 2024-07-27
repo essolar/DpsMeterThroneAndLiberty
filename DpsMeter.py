@@ -75,6 +75,9 @@ def update_dps():
     global previous_health, start_time, total_damage
     screen = capture_screen(bbox)
     ### assume you have a function that extracts and converts the health value to integer
+    ### change the way values are taken from the image. The improvement will be:
+    ### only take the value of the lost health of the dummy and set the maximum health value of the dummy in the UI.
+    ### this will help the OCR to better detect the values.
     current_health = extract_health_value(screen)
     cleaned_health = current_health.replace(',', '').replace('.', '').strip()
     print("Extracted value:", cleaned_health)
@@ -105,6 +108,7 @@ def reset_counters():
     label_total_damage.config(text="Total Damage: 0")
     label_time.config(text="Time: 0.00s")
 
+### UI
 ### initialize variables
 previous_health = None
 start_time = time.time()
