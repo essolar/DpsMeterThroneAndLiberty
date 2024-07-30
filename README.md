@@ -1,5 +1,5 @@
 
-# DpsMeterTL
+# DpsMeter Throne And Liberty
 This project involves calculating damage to test dummies in Throne And Liberty, using OCR technology with Python. The goal is to perform damage tests for each character build.
 
 # Description
