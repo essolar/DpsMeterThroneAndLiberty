@@ -5,12 +5,43 @@ import time
 import cv2
 import numpy as np
 import ctypes
-
+import asyncio
+import threading
+import websockets
+import json
+from ClientSide import send_dps_data,receive_data
 ### tesseract OCR configuration
 ### ********** YOU NEED INSTALL TESSERACT https://github.com/UB-Mannheim/tesseract 
 pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 ### pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Python312\Scripts\pytesseract.exe'
 
+# Global event loop
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# Variable global para el WebSocket
+websocket = None
+client_name = None
+host_ip = None
+# WebSocket callback function
+def on_websocket_data(data):
+    print("Received data:", data)
+    # Aquí puedes actualizar la interfaz o procesar la información recibida
+
+# Función para iniciar el cliente WebSocket
+async def start_websocket_client(name, host_ip):
+    global websocket
+    websocket = await websockets.connect(f'ws://{host_ip}:8765')
+    await websocket.send(json.dumps({'name': name}))
+    await receive_data(websocket, on_websocket_data)
+
+def run_websocket_client(name, host_ip):
+    loop.run_until_complete(start_websocket_client(name, host_ip))
+
+
+# Función para enviar datos de DPS
+async def send_dps(name, dps, total_damage, elapsed_time):
+    await send_dps_data(websocket, name, dps, total_damage, elapsed_time)
 
 def capture_screen(bbox=None):
      return ImageGrab.grab(bbox)
@@ -74,7 +105,7 @@ def extract_health_value(image):
     return text
 
 ### function to calculate DPS and other values
-def update_dps():
+def update_dps(name):
     global previous_health, start_time, total_damage, bbox
     if timer_running:
         screen = capture_screen(bbox)
@@ -100,11 +131,15 @@ def update_dps():
             label_dps.config(text=f"DPS: {dps:.2f}")
             label_total_damage.config(text=f"Total Damage: {total_damage}")
             label_time.config(text=f"Refresh: {elapsed_time:.2f}s")
+
+            # Send data to WebSocket server
+            asyncio.run_coroutine_threadsafe(send_dps(name,dps, total_damage, elapsed_time), loop)
+        
         
         previous_health = current_health
         start_time = time.time()
         update_timer()
-        root.after(800, update_dps)  ### call this function every 1 second
+        root.after(800, update_dps,name)  ### call this function every 1 second
 
 def reset_counters():
     global previous_health, start_time, total_damage
@@ -169,11 +204,14 @@ def start_timer():
     global timer_running, timer_start_time,start_time,previous_health
     screen = capture_screen(bbox)
     previous_health = int(extract_health_value(screen).replace(',', '').replace('.', '').strip())
-    if not timer_running:
+    if not client_name:
+        print("Please enter your client name.")
+        return
+    if not timer_running and client_name:
         timer_running = True
         timer_start_time = time.time()
         start_time = time.time()
-        update_dps()
+        update_dps(client_name)
         update_timer()
 
 def stop_timer():
@@ -206,6 +244,37 @@ get_screen_size()
 canvas = tk.Canvas(root, highlightthickness=0)
 canvas.pack(fill=tk.BOTH, expand=True)
 
+# Entry para el nombre del cliente
+tk.Label(root, text="Usuario:").pack()
+client_name_entry = tk.Entry(root)
+client_name_entry.pack()
+
+# Entry para la IP del host
+tk.Label(root, text="Host IP:").pack()
+host_ip_entry = tk.Entry(root)
+host_ip_entry.pack()
+def on_connect():
+    print("Starting WebSocket client...")
+    global client_name, host_ip
+    client_name = client_name_entry.get()
+    host_ip = host_ip_entry.get()
+    if client_name and host_ip:
+        # Iniciar el cliente WebSocket en un hilo separado
+        websocket_thread = threading.Thread(target=run_websocket_client, args=(client_name, host_ip), daemon=True)
+        websocket_thread.start()
+
+
+# print("Starting WebSocket client...")
+#     # Start WebSocket client in a separate thread
+# websocket_thread = threading.Thread(target=run_websocket_client, daemon=True)
+# websocket_thread.start()
+
+print("Starting Tkinter application...")
+
+connect_button = tk.Button(root, text="Connect", command=on_connect)
+connect_button.pack()
+
+
 
 display_image_label = tk.Label(root)
 display_image_label.pack(fill=tk.BOTH, expand=True)
@@ -225,7 +294,7 @@ label_time = tk.Label(root, text="Refresh: 0.00s", font=('Helvetica', 14))
 label_time.pack()
 
 
-### start button
+    ### start button
 start_button = tk.Button(root, text="Hit the dummy!", command=lambda: start_timer())
 start_button.pack()
 
@@ -237,8 +306,7 @@ stop_button.pack()
 
 label_timeformat = tk.Label(root, text="Time: 0 seconds", font=('Helvetica', 14))
 label_timeformat.pack()
-
-
-
-### run the application
+        
+    # Tu configuración de Tkinter aquí
 root.mainloop()
+print("Tkinter application started")
